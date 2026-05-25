@@ -1,0 +1,6 @@
+{
+  "name": "irve-studio-api",
+  "version": "1.0.0",
+  "description": "API Vercel pour IRVE Studio - envoi email via Brevo",
+  "private": true
+}
