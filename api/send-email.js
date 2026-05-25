@@ -30,19 +30,25 @@ module.exports = async function handler(req, res) {
     console.log('PJ - etude:', !!attEtude, 'devis_pdf:', !!attDevis, 'docx:', !!attDocx);
 
     // HTML client
-    const htmlClient = '<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:Arial,sans-serif;font-size:13px;color:#222;max-width:600px;margin:0 auto;padding:20px;">'
-      + '<div style="background:#0a1628;color:white;padding:16px 20px;border-radius:8px;margin-bottom:16px;">'
-      + '<h1 style="font-size:16px;margin:0;">Votre etude IRVE</h1>'
-      + '<p style="font-size:11px;color:#8899bb;margin:4px 0 0;">Etablie le ' + (data.date_etude||'') + '</p></div>'
-      + '<p>Bonjour ' + (data.nom||'') + ',</p>'
-      + '<p style="margin:12px 0;">Veuillez trouver ci-joint votre etude tarifaire et votre devis IRVE.</p>'
-      + '<div style="background:#f5f9ff;border-left:4px solid #00875a;padding:14px 18px;border-radius:0 6px 6px 0;">'
-      + '<p><strong>Borne :</strong> ' + (data.borne_nom||'') + ' — ' + (data.borne_kw||'') + ' kW</p>'
-      + '<p style="margin-top:8px;"><strong>Devis :</strong> <span style="font-size:16px;font-weight:800;color:#00875a;">' + (data.devis_net||'') + ' EUR TTC</span></p>'
-      + '<p style="margin-top:8px;"><strong>Meilleure offre :</strong> ' + (data.tarif_nom||'') + ' — ' + (data.tarif_off||'') + '</p>'
-      + '<p style="margin-top:8px;"><strong>Economie estimee :</strong> ' + (data.diff_actuel||'') + ' EUR/an</p>'
+    const htmlClient = '<!DOCTYPE html><html><head><meta charset="UTF-8"></head>'
+      + '<body style="font-family:Arial,sans-serif;font-size:13px;color:#222;max-width:600px;margin:0 auto;padding:20px;">'
+      + '<div style="background:#0a1628;color:white;padding:20px;border-radius:8px;margin-bottom:20px;">'
+      + '<h1 style="font-size:18px;margin:0 0 4px;">Votre etude IRVE</h1>'
+      + '<p style="font-size:11px;color:#8899bb;margin:0;">Etablie le ' + (data.date_etude||'') + '</p>'
       + '</div>'
-      + '<p style="margin-top:16px;font-size:11px;color:#888;">Devis valable 30 jours.</p>'
+      + '<p>Bonjour ' + (data.nom||'') + ',</p>'
+      + '<p style="margin:12px 0 20px;">Suite a votre demande, veuillez trouver ci-joint en pieces jointes :</p>'
+      + '<ul style="margin:0 0 20px;padding-left:20px;line-height:2;">'
+      + '<li><strong>Votre etude tarifaire</strong> (fichier .html — ouvrir dans le navigateur)</li>'
+      + '<li><strong>Votre devis IRVE</strong> (fichier .html — ouvrir dans le navigateur)</li>'
+      + '</ul>'
+      + '<div style="background:#f5f9ff;border-left:4px solid #00875a;padding:16px 18px;border-radius:0 6px 6px 0;margin-bottom:20px;">'
+      + '<p style="margin:0 0 8px;"><strong>Borne recommandee :</strong> ' + (data.borne_nom||'') + ' — ' + (data.borne_kw||'') + ' kW</p>'
+      + '<p style="margin:0 0 8px;"><strong>Montant du devis :</strong> <span style="font-size:16px;font-weight:800;color:#00875a;">' + (data.devis_net||'') + ' EUR TTC</span></p>'
+      + '<p style="margin:0 0 8px;"><strong>Meilleure offre tarifaire :</strong> ' + (data.tarif_nom||'') + ' — ' + (data.tarif_off||'') + '</p>'
+      + '<p style="margin:0;"><strong>Economie estimee :</strong> ' + (data.diff_actuel||'') + ' EUR/an vs votre contrat actuel</p>'
+      + '</div>'
+      + '<p style="font-size:11px;color:#888;border-top:1px solid #eee;padding-top:12px;">Pour sauvegarder en PDF : ouvrez le fichier .html dans votre navigateur puis faites Ctrl+P (ou Cmd+P sur Mac) → Enregistrer en PDF.<br>Devis valable 30 jours. Contactez-nous pour toute question.</p>'
       + '</body></html>';
 
     // HTML admin
