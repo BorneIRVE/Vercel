@@ -1,127 +1,127 @@
-module.exports.config = { api: { bodyParser: { sizeLimit: '10mb' } } };
+// api/send-email.js — Vercel Serverless Function (CommonJS)
+// Envoi email via Brevo API v3 avec pièces jointes PDF + Word
 
 module.exports = async function handler(req, res) {
+
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   try {
     const data = req.body;
-    if (!data || !data.nom || !data.email) return res.status(400).json({ error: 'Nom et email requis' });
+
+    if (!data || !data.nom || !data.email) {
+      return res.status(400).json({ error: 'Nom et email requis' });
+    }
 
     const BREVO_KEY = process.env.BREVO_API_KEY;
     const MON_EMAIL = process.env.MON_EMAIL;
-    if (!BREVO_KEY || !MON_EMAIL) return res.status(500).json({ error: 'Variables manquantes' });
 
-    const clientEmail = data.client_email || data.email;
-    const safeName = (data.nom||'client').replace(/\s+/g,'-').replace(/[^a-zA-Z0-9-]/g,'');
-    const safeDate = (data.date_etude||'').replace(/\//g,'-');
+    if (!BREVO_KEY || !MON_EMAIL) {
+      return res.status(500).json({ error: 'Variables manquantes : BREVO_API_KEY et MON_EMAIL' });
+    }
 
-    console.log('client:', clientEmail, '| admin:', MON_EMAIL);
-    console.log('tailles - etude:', (data.etude_pdf_b64||'').length, 'devis:', (data.devis_pdf_b64||'').length, 'docx:', (data.docx_b64||'').length);
+    // HTML email
+    const lignesHtml = (data.lignes_devis || []).map(function(l) {
+      return '<tr><td>' + l.l + '</td><td style="text-align:right;font-weight:600;">' + l.v + ' EUR HT</td></tr>';
+    }).join('');
+
+    const classHtml = (data.classement || []).map(function(r, i) {
+      var bg   = i === 0 ? 'background:#e8fff4;font-weight:700;' : (i % 2 === 0 ? 'background:#f8f8f8;' : '');
+      var dc   = i === 0 ? '#00875a' : '#555';
+      var difc = String(r.diff || '').startsWith('-') ? '#00875a' : '#c0392b';
+      return '<tr style="' + bg + '"><td style="color:' + dc + ';">' + (i === 0 ? '*' : i + 1) + '</td>'
+        + '<td>' + r.n + '</td><td>' + r.o + '</td>'
+        + '<td style="text-align:right;">' + r.ft + ' EUR</td>'
+        + '<td style="text-align:right;color:' + difc + ';">' + r.diff + ' EUR</td></tr>';
+    }).join('');
+
+    var advRow = Number(data.devis_adv) > 0
+      ? '<tr style="font-weight:800;color:#00875a;"><td>Net apres prime ADVENIR</td><td style="text-align:right;">' + data.devis_net + ' EUR</td></tr>'
+      : '';
+
+    var msgRow = data.msg
+      ? '<div class="row"><span class="lbl">Message</span><span class="val">' + data.msg + '</span></div>'
+      : '';
+
+    var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>'
+      + 'body{font-family:Arial,sans-serif;font-size:13px;color:#222;max-width:620px;margin:0 auto;padding:20px;}'
+      + '.hd{background:#0a1628;color:white;padding:16px 20px;border-radius:8px;margin-bottom:16px;}'
+      + '.hd h1{font-size:16px;margin:0;}.hd p{font-size:11px;color:#8899bb;margin:4px 0 0;}'
+      + '.bloc{background:#f5f9ff;border-left:4px solid #00875a;padding:12px 16px;margin-bottom:12px;border-radius:0 6px 6px 0;}'
+      + '.bloc h2{font-size:13px;font-weight:700;color:#00875a;margin:0 0 8px;}'
+      + '.row{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #e8e8e8;font-size:12px;}'
+      + '.lbl{color:#888;}.val{font-weight:600;}'
+      + 'table{width:100%;border-collapse:collapse;font-size:11px;margin-top:8px;}'
+      + 'th{background:#0a1628;color:white;padding:5px 7px;text-align:left;font-size:10px;}'
+      + 'td{padding:5px 7px;border-bottom:1px solid #eee;}'
+      + '.ft{font-size:10px;color:#aaa;margin-top:14px;border-top:1px solid #eee;padding-top:8px;}'
+      + '</style></head><body>'
+      + '<div class="hd"><h1>Nouvelle etude IRVE - ' + data.nom + '</h1>'
+      + '<p>Recue le ' + data.date_etude + ' via IRVE Studio</p></div>'
+      + '<div class="bloc"><h2>Coordonnees client</h2>'
+      + '<div class="row"><span class="lbl">Nom</span><span class="val">' + data.nom + '</span></div>'
+      + '<div class="row"><span class="lbl">Email</span><span class="val">' + data.email + '</span></div>'
+      + '<div class="row"><span class="lbl">Telephone</span><span class="val">' + (data.tel || '-') + '</span></div>'
+      + '<div class="row"><span class="lbl">Code postal</span><span class="val">' + (data.cp || '-') + '</span></div>'
+      + '<div class="row"><span class="lbl">Installation</span><span class="val">' + (data.itype || '-') + '</span></div>'
+      + msgRow + '</div>'
+      + '<div class="bloc"><h2>Devis borne retenue</h2>'
+      + '<div class="row"><span class="lbl">Borne</span><span class="val">' + data.borne_nom + ' (' + data.borne_marque + ')</span></div>'
+      + '<div class="row"><span class="lbl">Puissance</span><span class="val">' + data.borne_kw + ' kW - ' + data.nb_bornes + ' borne(s)</span></div>'
+      + '<table><tbody>' + lignesHtml
+      + '<tr><td>TVA 5,5%</td><td style="text-align:right;">' + data.devis_tva + ' EUR</td></tr>'
+      + '<tr style="font-weight:700;"><td>Total TTC</td><td style="text-align:right;">' + data.devis_ttc + ' EUR</td></tr>'
+      + advRow + '</tbody></table></div>'
+      + '<div class="bloc"><h2>Recommandation tarifaire</h2>'
+      + '<div class="row"><span class="lbl">Fournisseur</span><span class="val">' + data.tarif_nom + ' - ' + data.tarif_off + '</span></div>'
+      + '<div class="row"><span class="lbl">Facture estimee</span><span class="val">' + data.facture_an + ' EUR/an</span></div>'
+      + '<div class="row"><span class="lbl">vs actuel</span><span class="val">' + data.diff_actuel + ' EUR/an</span></div>'
+      + '<div class="row"><span class="lbl">ROI borne</span><span class="val">' + data.roi + '</span></div>'
+      + '<div class="row"><span class="lbl">Cout 100km VE</span><span class="val">' + data.c100km + ' EUR</span></div></div>'
+      + '<div class="bloc"><h2>Classement des offres</h2>'
+      + '<table><thead><tr><th>#</th><th>Fournisseur</th><th>Offre</th><th>Facture/an</th><th>Diff.</th></tr></thead>'
+      + '<tbody>' + classHtml + '</tbody></table></div>'
+      + '<div class="ft">IRVE Studio - Devis estimatif valable 30 jours - ' + data.date_etude + '</div>'
+      + '</body></html>';
 
     // Pièces jointes
-    const makeAtt = (b64, name) => (b64 && b64.length > 500) ? { name, content: b64 } : null;
-    const attEtude = makeAtt(data.etude_pdf_b64, 'etude-irve-' + safeName + '-' + safeDate + '.pdf');
-    const attDevis = makeAtt(data.devis_pdf_b64, 'devis-irve-' + safeName + '-' + safeDate + '.pdf');
-    const attDocx  = makeAtt(data.docx_b64,      'devis-irve-' + safeName + '-' + safeDate + '.docx');
-    console.log('PJ - etude:', !!attEtude, 'devis_pdf:', !!attDevis, 'docx:', !!attDocx);
+    var safeName = (data.nom || 'client').replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-]/g, '');
+    var safeDate = (data.date_etude || '').replace(/\//g, '-');
+    var attachments = [];
 
-    // HTML client
-    const htmlClient = '<!DOCTYPE html><html><head><meta charset="UTF-8"></head>'
-      + '<body style="font-family:Arial,sans-serif;font-size:13px;color:#222;max-width:600px;margin:0 auto;padding:20px;">'
-      + '<div style="background:#0a1628;color:white;padding:20px;border-radius:8px;margin-bottom:20px;">'
-      + '<h1 style="font-size:18px;margin:0 0 4px;">Votre etude IRVE</h1>'
-      + '<p style="font-size:11px;color:#8899bb;margin:0;">Etablie le ' + (data.date_etude||'') + '</p>'
-      + '</div>'
-      + '<p>Bonjour ' + (data.nom||'') + ',</p>'
-      + '<p style="margin:12px 0 20px;">Suite a votre demande, veuillez trouver ci-joint en pieces jointes :</p>'
-      + '<ul style="margin:0 0 20px;padding-left:20px;line-height:2;">'
-      + '<li><strong>Votre etude tarifaire</strong> (fichier .html — ouvrir dans le navigateur)</li>'
-      + '<li><strong>Votre devis IRVE</strong> (fichier .html — ouvrir dans le navigateur)</li>'
-      + '</ul>'
-      + '<div style="background:#f5f9ff;border-left:4px solid #00875a;padding:16px 18px;border-radius:0 6px 6px 0;margin-bottom:20px;">'
-      + '<p style="margin:0 0 8px;"><strong>Borne recommandee :</strong> ' + (data.borne_nom||'') + ' — ' + (data.borne_kw||'') + ' kW</p>'
-      + '<p style="margin:0 0 8px;"><strong>Montant du devis :</strong> <span style="font-size:16px;font-weight:800;color:#00875a;">' + (data.devis_net||'') + ' EUR TTC</span></p>'
-      + '<p style="margin:0 0 8px;"><strong>Meilleure offre tarifaire :</strong> ' + (data.tarif_nom||'') + ' — ' + (data.tarif_off||'') + '</p>'
-      + '<p style="margin:0;"><strong>Economie estimee :</strong> ' + (data.diff_actuel||'') + ' EUR/an vs votre contrat actuel</p>'
-      + '</div>'
-      + '<p style="font-size:11px;color:#888;border-top:1px solid #eee;padding-top:12px;">Pour sauvegarder en PDF : ouvrez le fichier .html dans votre navigateur puis faites Ctrl+P (ou Cmd+P sur Mac) → Enregistrer en PDF.<br>Devis valable 30 jours. Contactez-nous pour toute question.</p>'
-      + '</body></html>';
-
-    // HTML admin
-    const lignesHtml = (data.lignes_devis||[]).map(l => '<tr><td style="padding:4px 6px;border-bottom:1px solid #eee;">' + l.l + '</td><td style="padding:4px 6px;border-bottom:1px solid #eee;text-align:right;">' + l.v + ' EUR HT</td></tr>').join('');
-    const htmlAdmin = '<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:Arial,sans-serif;font-size:13px;color:#222;max-width:640px;margin:0 auto;padding:20px;">'
-      + '<h2 style="color:#0a1628;">Nouvelle etude IRVE — ' + (data.nom||'') + '</h2>'
-      + '<p><strong>Email client :</strong> ' + clientEmail + '</p>'
-      + '<p><strong>Tel :</strong> ' + (data.tel||'-') + ' | <strong>CP :</strong> ' + (data.cp||'-') + '</p>'
-      + '<p><strong>Installation :</strong> ' + (data.itype||'-') + ' | <strong>Bornes :</strong> ' + (data.nb_bornes||'1') + '</p>'
-      + (data.msg ? '<p><strong>Message :</strong> ' + data.msg + '</p>' : '')
-      + '<h3 style="color:#00875a;margin-top:16px;">Devis</h3>'
-      + '<table style="width:100%;border-collapse:collapse;font-size:12px;"><tbody>'
-      + lignesHtml
-      + '<tr><td style="padding:4px 6px;border-bottom:1px solid #eee;">TVA 5,5%</td><td style="padding:4px 6px;text-align:right;">' + (data.devis_tva||'') + ' EUR</td></tr>'
-      + '<tr><td style="padding:4px 6px;font-weight:700;">Total TTC</td><td style="padding:4px 6px;font-weight:700;text-align:right;">' + (data.devis_ttc||'') + ' EUR</td></tr>'
-      + (Number(data.devis_adv)>0 ? '<tr><td style="padding:4px 6px;color:#00875a;font-weight:800;">Net ADVENIR</td><td style="padding:4px 6px;color:#00875a;font-weight:800;text-align:right;">' + (data.devis_net||'') + ' EUR</td></tr>' : '')
-      + '</tbody></table>'
-      + '<h3 style="color:#00875a;margin-top:16px;">Recommandation</h3>'
-      + '<p>' + (data.tarif_nom||'') + ' — ' + (data.tarif_off||'') + ' : ' + (data.facture_an||'') + ' EUR/an | vs actuel : ' + (data.diff_actuel||'') + ' EUR/an</p>'
-      + '<p>Rentabilite : ' + (data.roi||'') + ' | Cout 100km : ' + (data.c100km||'') + ' EUR</p>'
-      + '</body></html>';
-
-    const sendBrevo = async (to, toName, subject, htmlContent, atts) => {
-      const validAtts = atts.filter(Boolean);
-      const payload = {
-        sender:      { name: 'IRVE Studio', email: MON_EMAIL },
-        to:          [{ email: to, name: toName }],
-        subject,
-        htmlContent,
-      };
-      if (validAtts.length > 0) payload.attachment = validAtts;
-      console.log('sendBrevo to:', to, '| atts:', validAtts.length);
-      const r = await fetch('https://api.brevo.com/v3/smtp/email', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json', 'api-key': BREVO_KEY },
-        body:    JSON.stringify(payload),
-      });
-      const txt = await r.text();
-      console.log('Brevo response', to, ':', r.status, txt.substring(0, 150));
-      if (!r.ok) throw new Error('Brevo ' + r.status + ': ' + txt.substring(0, 100));
-    };
-
-    // Envoi 1 : email au client (etude PDF + devis PDF)
-    const errClient = await sendBrevo(
-      clientEmail, data.nom,
-      'Votre etude IRVE du ' + (data.date_etude||''),
-      htmlClient,
-      [attEtude, attDevis]
-    ).then(() => null).catch(e => e.message);
-
-    console.log('Envoi client:', errClient || 'OK');
-
-    // Envoi 2 : email admin (etude PDF + devis PDF + Word)
-    const errAdmin = await sendBrevo(
-      MON_EMAIL, 'IRVE Studio',
-      '[IRVE Studio] ' + (data.nom||'') + ' — ' + (data.date_etude||''),
-      htmlAdmin,
-      [attEtude, attDevis, attDocx]
-    ).then(() => null).catch(e => e.message);
-
-    console.log('Envoi admin:', errAdmin || 'OK');
-
-    if (errClient && errAdmin) {
-      return res.status(500).json({ error: 'Echec total: client=' + errClient + ' admin=' + errAdmin });
+    if (data.pdf_b64) {
+      attachments.push({ name: 'etude-irve-' + safeName + '-' + safeDate + '.pdf', content: data.pdf_b64 });
     }
-    if (errClient) {
-      return res.status(500).json({ error: 'Echec envoi client: ' + errClient });
+    if (data.docx_b64) {
+      attachments.push({ name: 'devis-irve-' + safeName + '-' + safeDate + '.docx', content: data.docx_b64 });
+    }
+
+    // Appel Brevo
+    var brevoResp = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'api-key': BREVO_KEY },
+      body: JSON.stringify({
+        sender:      { name: 'IRVE Studio', email: MON_EMAIL },
+        to:          [{ email: MON_EMAIL, name: 'IRVE Studio' }],
+        subject:     '[IRVE Studio] Nouvelle etude - ' + data.nom + ' - ' + data.date_etude,
+        htmlContent: html,
+        attachment:  attachments,
+      }),
+    });
+
+    if (!brevoResp.ok) {
+      var err = await brevoResp.json().catch(function() { return {}; });
+      throw new Error(err.message || 'Brevo HTTP ' + brevoResp.status);
     }
 
     return res.status(200).json({ success: true });
 
-  } catch(err) {
-    console.error('Handler error:', err.message);
+  } catch (err) {
+    console.error('send-email error:', err.message);
     return res.status(500).json({ error: err.message || 'Erreur interne' });
   }
 };
