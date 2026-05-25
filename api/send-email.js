@@ -29,26 +29,27 @@ module.exports = async function handler(req, res) {
     const attDocx  = makeAtt(data.docx_b64,      'devis-irve-' + safeName + '-' + safeDate + '.docx');
     console.log('PJ - etude:', !!attEtude, 'devis_pdf:', !!attDevis, 'docx:', !!attDocx);
 
-    // HTML client
+    // HTML client — email professionnel
     const htmlClient = '<!DOCTYPE html><html><head><meta charset="UTF-8"></head>'
       + '<body style="font-family:Arial,sans-serif;font-size:13px;color:#222;max-width:600px;margin:0 auto;padding:20px;">'
-      + '<div style="background:#0a1628;color:white;padding:20px;border-radius:8px;margin-bottom:20px;">'
-      + '<h1 style="font-size:18px;margin:0 0 4px;">Votre etude IRVE</h1>'
+      + '<div style="background:#0a1628;color:white;padding:20px 24px;border-radius:8px;margin-bottom:24px;">'
+      + '<h1 style="font-size:20px;margin:0 0 4px;font-weight:800;">Votre etude IRVE</h1>'
       + '<p style="font-size:11px;color:#8899bb;margin:0;">Etablie le ' + (data.date_etude||'') + '</p>'
       + '</div>'
-      + '<p>Bonjour ' + (data.nom||'') + ',</p>'
-      + '<p style="margin:12px 0 20px;">Suite a votre demande, veuillez trouver ci-joint en pieces jointes :</p>'
-      + '<ul style="margin:0 0 20px;padding-left:20px;line-height:2;">'
-      + '<li><strong>Votre etude tarifaire</strong> (fichier .html — ouvrir dans le navigateur)</li>'
-      + '<li><strong>Votre devis IRVE</strong> (fichier .html — ouvrir dans le navigateur)</li>'
-      + '</ul>'
+      + '<p style="margin:0 0 12px;">Bonjour <strong>' + (data.nom||'') + '</strong>,</p>'
+      + '<p style="margin:0 0 20px;line-height:1.6;">Suite a votre demande de configuration de borne de recharge IRVE, veuillez trouver ci-joint en pieces jointes votre etude tarifaire personnalisee ainsi que votre devis detaille.</p>'
       + '<div style="background:#f5f9ff;border-left:4px solid #00875a;padding:16px 18px;border-radius:0 6px 6px 0;margin-bottom:20px;">'
+      + '<p style="margin:0 0 8px;font-size:12px;font-weight:700;color:#00875a;text-transform:uppercase;letter-spacing:.5px;">Recapitulatif</p>'
       + '<p style="margin:0 0 8px;"><strong>Borne recommandee :</strong> ' + (data.borne_nom||'') + ' — ' + (data.borne_kw||'') + ' kW</p>'
-      + '<p style="margin:0 0 8px;"><strong>Montant du devis :</strong> <span style="font-size:16px;font-weight:800;color:#00875a;">' + (data.devis_net||'') + ' EUR TTC</span></p>'
+      + '<p style="margin:0 0 8px;"><strong>Montant du devis :</strong> <span style="font-size:17px;font-weight:800;color:#00875a;">' + (data.devis_net||'') + ' EUR TTC</span></p>'
       + '<p style="margin:0 0 8px;"><strong>Meilleure offre tarifaire :</strong> ' + (data.tarif_nom||'') + ' — ' + (data.tarif_off||'') + '</p>'
+      + '<p style="margin:0 0 8px;"><strong>Facture estimee :</strong> ' + (data.facture_an||'') + ' EUR/an</p>'
       + '<p style="margin:0;"><strong>Economie estimee :</strong> ' + (data.diff_actuel||'') + ' EUR/an vs votre contrat actuel</p>'
       + '</div>'
-      + '<p style="font-size:11px;color:#888;border-top:1px solid #eee;padding-top:12px;">Pour sauvegarder en PDF : ouvrez le fichier .html dans votre navigateur puis faites Ctrl+P (ou Cmd+P sur Mac) → Enregistrer en PDF.<br>Devis valable 30 jours. Contactez-nous pour toute question.</p>'
+      + '<p style="margin:0 0 12px;line-height:1.6;">Ce devis est valable 30 jours. N\'hesitez pas a nous contacter pour toute question ou pour planifier votre installation.</p>'
+      + '<p style="margin:0 0 20px;line-height:1.6;">Cordialement,<br><strong>' + (data.entreprise_nom||'IRVE Studio') + '</strong></p>'
+      + '<hr style="border:none;border-top:1px solid #eee;margin:16px 0;">'
+      + '<p style="font-size:10px;color:#aaa;margin:0;line-height:1.5;">Ce message et ses pieces jointes sont destines exclusivement a leur destinataire. Devis estimatif sous reserve de visite technique.</p>'
       + '</body></html>';
 
     // HTML admin
