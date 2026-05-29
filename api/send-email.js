@@ -66,7 +66,8 @@ module.exports = async function handler(req, res) {
       + '<div style="background:#0a1628;color:white;padding:16px 20px;border-radius:8px;margin-bottom:16px;">'
       + '<h1 style="font-size:16px;margin:0;">Nouvelle etude IRVE — ' + (data.nom||'') + '</h1>'
       + '<p style="font-size:11px;color:#8899bb;margin:4px 0 0;">Recue le ' + (data.date_etude||'') + '</p></div>'
-      + '<p><strong>Email :</strong> ' + clientEmail + ' | <strong>Tel :</strong> ' + (data.tel||'-') + ' | <strong>CP :</strong> ' + (data.cp||'-') + '</p>'
+      + '<p><strong>Email :</strong> ' + clientEmail + ' | <strong>Tel :</strong> ' + (data.tel||'-') + '</p>'
+      + '<p><strong>Adresse :</strong> ' + (data.adr||'-') + ' ' + (data.cp||'') + ' ' + (data.ville||'') + '</p>'
       + '<p><strong>Installation :</strong> ' + (data.itype||'-') + ' | <strong>Bornes :</strong> ' + (data.nb_bornes||'1') + '</p>'
       + (data.msg ? '<p><strong>Message :</strong> ' + data.msg + '</p>' : '')
       + '<h3 style="margin:14px 0 6px;color:#00875a;">Devis</h3>'
