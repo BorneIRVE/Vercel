@@ -15,12 +15,19 @@ module.exports = async function handler(req, res) {
   try {
     const r = await fetch(`${KV_URL}/get/irve_depenses`, { headers: { Authorization: `Bearer ${KV_TOKEN}` } });
     const json = await r.json();
+    console.log('KV result type:', typeof json.result, '- value:', JSON.stringify(json).substring(0,100));
     let depenses = [];
     if (json.result) {
       const raw = json.result;
-      depenses = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      try {
+        depenses = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      } catch(e) {
+        // Double encodé
+        depenses = JSON.parse(JSON.parse(raw));
+      }
       if (!Array.isArray(depenses)) depenses = [];
     }
+    console.log('Dépenses retournées:', depenses.length);
     return res.status(200).json({ depenses });
   } catch(err) {
     return res.status(500).json({ error: err.message });

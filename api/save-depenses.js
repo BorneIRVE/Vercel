@@ -19,7 +19,7 @@ module.exports = async function handler(req, res) {
     const r = await fetch(`${KV_URL}/set/irve_depenses`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${KV_TOKEN}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(JSON.stringify(depenses)),
+      body: JSON.stringify(depenses),
     });
     const json = await r.json();
     console.log('Dépenses sauvegardées:', depenses.length, '-', JSON.stringify(json));
