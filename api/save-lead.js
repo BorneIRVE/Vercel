@@ -64,7 +64,7 @@ module.exports = async function handler(req, res) {
     const saveResp = await fetch(`${KV_URL}/set/crm_leads`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${KV_TOKEN}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(JSON.stringify(leads)),
+      body: JSON.stringify(leads),
     });
 
     console.log('Sauvegarde status:', saveResp.status);

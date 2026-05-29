@@ -78,7 +78,7 @@ module.exports = async function handler(req, res) {
       await fetch(`${KV_URL}/set/crm_leads`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${KV_TOKEN}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(JSON.stringify(leads)),
+        body: JSON.stringify(leads),
       });
 
       return res.status(200).json({ success: true });
