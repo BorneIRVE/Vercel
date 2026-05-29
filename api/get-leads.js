@@ -4,8 +4,8 @@ module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  const KV_URL   = process.env.KV_REST_API_URL   || process.env.UPSTASH_REDIS_REST_URL;
-  const KV_TOKEN = process.env.KV_REST_API_TOKEN  || process.env.UPSTASH_REDIS_REST_TOKEN;
+  const KV_URL   = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
+  const KV_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
   const CRM_PWD  = process.env.CRM_PASSWORD || 'irve2024';
 
   console.log('get-leads - KV configuré:', !!KV_URL, !!KV_TOKEN);
@@ -30,7 +30,7 @@ module.exports = async function handler(req, res) {
         headers: { Authorization: `Bearer ${KV_TOKEN}` },
       });
       const json = await r.json();
-      console.log('KV GET status:', r.status, '- result type:', typeof json.result, '- value:', String(json.result).substring(0,80));
+      console.log('KV GET status:', r.status, '- result type:', typeof json.result, '- value:', JSON.stringify(json).substring(0,200));
       let leads = [];
       if (json.result) {
         const raw = json.result;

@@ -10,8 +10,8 @@ module.exports = async function handler(req, res) {
     if (!data || !data.nom) return res.status(400).json({ error: 'Données manquantes' });
 
     // Supporte KV_REST_API_URL (Vercel KV) ou UPSTASH_REDIS_REST_URL
-    const KV_URL   = process.env.KV_REST_API_URL   || process.env.UPSTASH_REDIS_REST_URL;
-    const KV_TOKEN = process.env.KV_REST_API_TOKEN  || process.env.UPSTASH_REDIS_REST_TOKEN;
+    const KV_URL   = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
+    const KV_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
 
     console.log('KV configuré:', !!KV_URL, !!KV_TOKEN);
 
