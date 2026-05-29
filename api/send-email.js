@@ -49,7 +49,11 @@ module.exports = async function handler(req, res) {
       + '<p style="margin:0 0 8px;"><strong>Meilleure offre :</strong> ' + (data.tarif_nom||'') + ' — ' + (data.tarif_off||'') + '</p>'
       + '<p style="margin:0;"><strong>Economie estimee :</strong> ' + (data.diff_actuel||'') + ' EUR/an</p></div>'
       + '<p style="margin:0 0 20px;line-height:1.6;">Ce devis est valable 30 jours. Contactez-nous pour toute question.</p>'
-      + '<p style="margin:0;line-height:1.6;">Cordialement,<br><strong>' + (data.entreprise_nom||'IRVE Studio') + '</strong></p>'
+      + '<p style="margin:0 0 20px;line-height:1.6;">Cordialement,<br><strong>' + (data.entreprise_nom||'IRVE Studio') + '</strong><br>'
+      + '<span style="color:#555;font-size:12px;">' + process.env.MON_EMAIL + '</span></p>'
+      + '<hr style="border:none;border-top:1px solid #eee;margin:16px 0;">'
+      + '<p style="font-size:11px;color:#999;margin:0 0 4px;font-style:italic;">⚠️ Cet email est envoye automatiquement, merci de ne pas y repondre directement.</p>'
+      + '<p style="font-size:11px;color:#aaa;margin:0;">Pour nous contacter : <strong>' + process.env.MON_EMAIL + '</strong></p>'
       + '</body></html>';
 
     // HTML admin
