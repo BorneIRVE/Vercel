@@ -1,51 +1,37 @@
-// api/drive-upload.js — Upload de fichiers vers Google Drive avec arborescence Année/Mois/Client
-// Utilise un compte de service Google (variables d'env: GOOGLE_SA_EMAIL, GOOGLE_SA_KEY, DRIVE_ROOT_FOLDER)
+// api/drive-upload.js — Upload vers Google Drive via OAuth (compte perso gratuit)
+// Variables d'env: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN, DRIVE_ROOT_FOLDER
 
-const crypto = require('crypto');
-
-// — Authentification compte de service : génère un access token via JWT —
+// — Obtenir un access token à partir du refresh token —
 async function getAccessToken() {
-  const email = process.env.GOOGLE_SA_EMAIL;
-  let key = process.env.GOOGLE_SA_KEY;
-  if (!email || !key) throw new Error('Compte de service Google non configuré');
-  key = key.replace(/\\n/g, '\n'); // restaurer les sauts de ligne de la clé privée
+  const id = process.env.GOOGLE_CLIENT_ID;
+  const secret = process.env.GOOGLE_CLIENT_SECRET;
+  const refresh = process.env.GOOGLE_REFRESH_TOKEN;
+  if (!id || !secret || !refresh) throw new Error('OAuth Google non configuré (CLIENT_ID, CLIENT_SECRET, REFRESH_TOKEN)');
 
-  const now = Math.floor(Date.now() / 1000);
-  const header = { alg: 'RS256', typ: 'JWT' };
-  const claim = {
-    iss: email,
-    scope: 'https://www.googleapis.com/auth/drive',
-    aud: 'https://oauth2.googleapis.com/token',
-    exp: now + 3600,
-    iat: now,
-  };
-  const b64 = obj => Buffer.from(JSON.stringify(obj)).toString('base64url');
-  const unsigned = b64(header) + '.' + b64(claim);
-  const signer = crypto.createSign('RSA-SHA256');
-  signer.update(unsigned);
-  const signature = signer.sign(key, 'base64url');
-  const jwt = unsigned + '.' + signature;
-
+  const params = new URLSearchParams({
+    client_id: id,
+    client_secret: secret,
+    refresh_token: refresh,
+    grant_type: 'refresh_token',
+  });
   const r = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: 'grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=' + jwt,
+    body: params.toString(),
   });
   const j = await r.json();
   if (!j.access_token) throw new Error('Auth Google échouée: ' + JSON.stringify(j));
   return j.access_token;
 }
 
-// — Trouver ou créer un sous-dossier —
 async function findOrCreateFolder(token, name, parentId) {
   const q = encodeURIComponent(`name='${name.replace(/'/g, "\\'")}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`);
-  const sr = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)&supportsAllDrives=true&includeItemsFromAllDrives=true`, {
+  const sr = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)`, {
     headers: { Authorization: 'Bearer ' + token },
   });
   const sj = await sr.json();
   if (sj.files && sj.files.length) return sj.files[0].id;
-  // Créer
-  const cr = await fetch('https://www.googleapis.com/drive/v3/files?supportsAllDrives=true', {
+  const cr = await fetch('https://www.googleapis.com/drive/v3/files', {
     method: 'POST',
     headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
     body: JSON.stringify({ name, mimeType: 'application/vnd.google-apps.folder', parents: [parentId] }),
@@ -74,12 +60,10 @@ module.exports = async function handler(req, res) {
     if (!ROOT) return res.status(500).json({ error: 'DRIVE_ROOT_FOLDER non configuré' });
 
     const token = await getAccessToken();
-    // Arborescence Année / Mois / Client
     const fAnnee = await findOrCreateFolder(token, String(annee), ROOT);
     const fMois = await findOrCreateFolder(token, String(mois), fAnnee);
     const fClient = await findOrCreateFolder(token, String(client), fMois);
 
-    // Upload multipart
     const boundary = '----irve' + Date.now();
     const meta = { name: fileName, parents: [fClient] };
     const buffer = Buffer.from(fileData, 'base64');
@@ -87,7 +71,7 @@ module.exports = async function handler(req, res) {
     const post = `\r\n--${boundary}--`;
     const body = Buffer.concat([Buffer.from(pre, 'utf8'), buffer, Buffer.from(post, 'utf8')]);
 
-    const ur = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true&fields=id,webViewLink', {
+    const ur = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink', {
       method: 'POST',
       headers: { Authorization: 'Bearer ' + token, 'Content-Type': `multipart/related; boundary=${boundary}` },
       body,
@@ -95,8 +79,7 @@ module.exports = async function handler(req, res) {
     const uj = await ur.json();
     if (!uj.id) throw new Error('Upload échoué: ' + JSON.stringify(uj));
 
-    // Rendre lisible par lien
-    await fetch(`https://www.googleapis.com/drive/v3/files/${uj.id}/permissions?supportsAllDrives=true`, {
+    await fetch(`https://www.googleapis.com/drive/v3/files/${uj.id}/permissions`, {
       method: 'POST',
       headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
       body: JSON.stringify({ role: 'reader', type: 'anyone' }),
