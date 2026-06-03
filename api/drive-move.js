@@ -46,44 +46,55 @@ module.exports = async function handler(req, res) {
     const ROOT = process.env.DRIVE_ROOT_FOLDER;
     if (!ROOT) return res.status(500).json({ error: 'DRIVE_ROOT_FOLDER non configuré' });
 
+    const debug = { recherche: { client, annee, mois, ancienStatut, nouveauStatut }, etapes: [] };
     const token = await getAccessToken();
 
     // Trouver le dossier année
     const fAnnee = await findFolder(token, String(annee), ROOT);
-    if (!fAnnee) return res.status(200).json({ success: true, moved: false, reason: 'année introuvable' });
+    debug.etapes.push('Dossier année "' + annee + '": ' + (fAnnee ? 'TROUVÉ' : 'INTROUVABLE'));
+    if (!fAnnee) return res.status(200).json({ success: true, moved: false, reason: 'année introuvable', debug });
 
-    // Trouver l'ancien dossier statut + mois + client
-    let fClient = null;
-    if (ancienStatut) {
-      const fOldStatut = await findFolder(token, ancienStatut, fAnnee);
-      if (fOldStatut) {
-        const fOldMois = await findFolder(token, mois, fOldStatut);
-        if (fOldMois) {
-          fClient = await findFolder(token, client, fOldMois);
-        }
+    // Lister les sous-dossiers de l'année (les statuts)
+    const lr = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(`'${fAnnee}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`)}&fields=files(id,name)`, { headers: { Authorization: 'Bearer ' + token } });
+    const lj = await lr.json();
+    const statuts = lj.files || [];
+    debug.etapes.push('Sous-dossiers année: ' + statuts.map(s => s.name).join(', '));
+
+    // Chercher le dossier client dans tous les statuts
+    let fClient = null, statutTrouve = null, fMoisTrouve = null;
+    for (const st of statuts) {
+      const fMoisTest = await findFolder(token, mois, st.id);
+      if (fMoisTest) {
+        const fc = await findFolder(token, client, fMoisTest);
+        if (fc) { fClient = fc; statutTrouve = st.name; fMoisTrouve = fMoisTest; break; }
       }
     }
-    // Si pas trouvé dans l'ancien statut, chercher partout dans l'année
+    debug.etapes.push('Dossier client "' + client + '" dans mois "' + mois + '": ' + (fClient ? 'TROUVÉ dans statut "' + statutTrouve + '"' : 'INTROUVABLE'));
+
     if (!fClient) {
-      // Le dossier client n'existe pas encore -> rien à déplacer
-      return res.status(200).json({ success: true, moved: false, reason: 'dossier client introuvable' });
+      return res.status(200).json({ success: true, moved: false, reason: 'dossier client introuvable', debug });
+    }
+    if (statutTrouve === nouveauStatut) {
+      return res.status(200).json({ success: true, moved: false, reason: 'déjà dans le bon statut', debug });
     }
 
     // Créer la nouvelle arborescence statut/mois
     const fNewStatut = await findOrCreateFolder(token, nouveauStatut, fAnnee);
     const fNewMois = await findOrCreateFolder(token, mois, fNewStatut);
 
-    // Récupérer le parent actuel du dossier client
+    // Récupérer le parent actuel
     const gr = await fetch(`https://www.googleapis.com/drive/v3/files/${fClient}?fields=parents`, { headers: { Authorization: 'Bearer ' + token } });
     const gj = await gr.json();
     const oldParents = (gj.parents || []).join(',');
 
-    // Déplacer : ajouter le nouveau parent, retirer l'ancien
-    await fetch(`https://www.googleapis.com/drive/v3/files/${fClient}?addParents=${fNewMois}&removeParents=${oldParents}&fields=id,parents`, {
+    // Déplacer
+    const mvr = await fetch(`https://www.googleapis.com/drive/v3/files/${fClient}?addParents=${fNewMois}&removeParents=${oldParents}&fields=id,parents`, {
       method: 'PATCH', headers: { Authorization: 'Bearer ' + token },
     });
+    const mvj = await mvr.json();
+    debug.etapes.push('Déplacement: ' + (mvj.id ? 'OK vers ' + nouveauStatut : 'ÉCHEC ' + JSON.stringify(mvj)));
 
-    return res.status(200).json({ success: true, moved: true });
+    return res.status(200).json({ success: true, moved: true, debug });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }

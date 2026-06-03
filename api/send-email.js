@@ -13,7 +13,22 @@ module.exports = async function handler(req, res) {
     if (!data || !data.nom || !data.email) return res.status(400).json({ error: 'Nom et email requis' });
 
     const BREVO_KEY = process.env.BREVO_API_KEY;
-    const MON_EMAIL = process.env.MON_EMAIL;
+    let MON_EMAIL = process.env.MON_EMAIL;
+
+    // Lire l'email d'envoi depuis KV si configuré via le panneau admin
+    const KV_URL   = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
+    const KV_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
+    if (KV_URL && KV_TOKEN) {
+      try {
+        const cfgR = await fetch(`${KV_URL}/get/irve_config`, { headers: { Authorization: `Bearer ${KV_TOKEN}` } });
+        const cfgJ = await cfgR.json();
+        if (cfgJ.result) {
+          const cfg = typeof cfgJ.result === 'string' ? JSON.parse(cfgJ.result) : cfgJ.result;
+          if (cfg.send_email) MON_EMAIL = cfg.send_email;
+        }
+      } catch(e) { console.log('Config KV non disponible, utilisation MON_EMAIL env'); }
+    }
+
     if (!BREVO_KEY || !MON_EMAIL) return res.status(500).json({ error: 'Variables manquantes' });
 
     const clientEmail = data.client_email || data.email;

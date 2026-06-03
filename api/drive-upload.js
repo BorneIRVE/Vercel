@@ -60,9 +60,13 @@ module.exports = async function handler(req, res) {
     if (!ROOT) return res.status(500).json({ error: 'DRIVE_ROOT_FOLDER non configuré' });
 
     const token = await getAccessToken();
-    const fAnnee = await findOrCreateFolder(token, String(annee), ROOT);
-    const fMois = await findOrCreateFolder(token, String(mois), fAnnee);
-    const fClient = await findOrCreateFolder(token, String(client), fMois);
+    // Construire l'arborescence : annee / [mois peut contenir des sous-dossiers séparés par /] / client
+    let parent = ROOT;
+    const segments = [String(annee)].concat(String(mois).split('/')).concat([String(client)]);
+    for (const seg of segments) {
+      if (seg && seg.trim()) parent = await findOrCreateFolder(token, seg.trim(), parent);
+    }
+    const fClient = parent;
 
     const boundary = '----irve' + Date.now();
     const meta = { name: fileName, parents: [fClient] };
