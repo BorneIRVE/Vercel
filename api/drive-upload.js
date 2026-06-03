@@ -24,6 +24,12 @@ async function getAccessToken() {
   return j.access_token;
 }
 
+async function findFolder(token, name, parentId) {
+  const q = encodeURIComponent(`name='${name.replace(/'/g, "\\'")}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`);
+  const r = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)`, { headers: { Authorization: 'Bearer ' + token } });
+  const j = await r.json();
+  return (j.files && j.files.length) ? j.files[0].id : null;
+}
 async function findOrCreateFolder(token, name, parentId) {
   const q = encodeURIComponent(`name='${name.replace(/'/g, "\\'")}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`);
   const sr = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)`, {
@@ -60,13 +66,41 @@ module.exports = async function handler(req, res) {
     if (!ROOT) return res.status(500).json({ error: 'DRIVE_ROOT_FOLDER non configuré' });
 
     const token = await getAccessToken();
-    // Construire l'arborescence : annee / [mois peut contenir des sous-dossiers séparés par /] / client
-    let parent = ROOT;
-    const segments = [String(annee)].concat(String(mois).split('/')).concat([String(client)]);
-    for (const seg of segments) {
-      if (seg && seg.trim()) parent = await findOrCreateFolder(token, seg.trim(), parent);
+    // Arborescence cible : annee / statut / mois / client (mois peut contenir statut/mois séparés par /)
+    const parts = String(mois).split('/').filter(s => s && s.trim()); // ex: ["Signé","06-Juin"]
+    const statutCible = parts[0] || 'Nouveau';
+    const moisCible = parts[1] || parts[0] || '';
+
+    const fAnnee = await findOrCreateFolder(token, String(annee), ROOT);
+
+    // Chercher si le client a DÉJÀ un dossier dans un autre statut ce mois-ci -> le réutiliser/déplacer
+    let fClient = null;
+    const statutsR = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(`'${fAnnee}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`)}&fields=files(id,name)`, { headers: { Authorization: 'Bearer ' + token } });
+    const statutsJ = await statutsR.json();
+    for (const st of (statutsJ.files || [])) {
+      const fM = await findFolder(token, moisCible, st.id);
+      if (fM) {
+        const fc = await findFolder(token, String(client), fM);
+        if (fc) { fClient = fc; break; }
+      }
     }
-    const fClient = parent;
+
+    // Créer l'arborescence cible
+    const fStatut = await findOrCreateFolder(token, statutCible, fAnnee);
+    const fMois = await findOrCreateFolder(token, moisCible, fStatut);
+
+    if (fClient) {
+      // Déplacer le dossier client existant vers le statut cible (s'il n'y est pas déjà)
+      const gr = await fetch(`https://www.googleapis.com/drive/v3/files/${fClient}?fields=parents`, { headers: { Authorization: 'Bearer ' + token } });
+      const gj = await gr.json();
+      const curParent = (gj.parents || [])[0];
+      if (curParent !== fMois) {
+        await fetch(`https://www.googleapis.com/drive/v3/files/${fClient}?addParents=${fMois}&removeParents=${(gj.parents||[]).join(',')}&fields=id,parents`, { method: 'PATCH', headers: { Authorization: 'Bearer ' + token } });
+      }
+    } else {
+      // Pas de dossier existant -> créer
+      fClient = await findOrCreateFolder(token, String(client), fMois);
+    }
 
     const boundary = '----irve' + Date.now();
     const meta = { name: fileName, parents: [fClient] };
