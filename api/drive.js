@@ -98,8 +98,27 @@ module.exports = async function handler(req,res){
 
     // === UPLOAD (POST) : upload un fichier (réutilise/déplace le dossier client) ===
     if(action==='upload'||!action){
-      const {fileName,fileData,mimeType,annee,mois,client}=req.body;
+      const {fileName,fileData,mimeType,annee,mois,client,fraisFonctionnement}=req.body;
       if(!fileName||!fileData)return res.status(400).json({error:'Fichier manquant'});
+
+      // Cas frais de fonctionnement : Frais-Fonctionnement / Année / Mois (à la racine)
+      if(fraisFonctionnement){
+        const fFrais=await findOrCreateFolder(token,'Frais-Fonctionnement',ROOT);
+        const fAnneeF=await findOrCreateFolder(token,String(annee),fFrais);
+        const fMoisF=await findOrCreateFolder(token,String(mois),fAnneeF);
+        const boundaryF='----irve'+Date.now();
+        const metaF={name:fileName,parents:[fMoisF]};
+        const bufferF=Buffer.from(fileData,'base64');
+        const preF=`--${boundaryF}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metaF)}\r\n--${boundaryF}\r\nContent-Type: ${mimeType||'application/octet-stream'}\r\n\r\n`;
+        const postF=`\r\n--${boundaryF}--`;
+        const bodyF=Buffer.concat([Buffer.from(preF,'utf8'),bufferF,Buffer.from(postF,'utf8')]);
+        const urF=await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':`multipart/related; boundary=${boundaryF}`},body:bodyF});
+        const ujF=await urF.json();
+        if(!ujF.id)throw new Error('Upload échoué: '+JSON.stringify(ujF));
+        await fetch(`https://www.googleapis.com/drive/v3/files/${ujF.id}/permissions`,{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({role:'reader',type:'anyone'})});
+        return res.status(200).json({success:true,link:ujF.webViewLink||`https://drive.google.com/file/d/${ujF.id}/view`,id:ujF.id});
+      }
+
       const parts=String(mois).split('/').filter(s=>s&&s.trim());
       const statutCible=parts[0]||'Nouveau';
       const moisCible=parts[1]||parts[0]||'';
