@@ -61,14 +61,26 @@ module.exports = async function handler(req,res){
       res.setHeader('Cache-Control','no-store');
       const client=(req.query.client||'').trim();
       if(!client)return res.status(400).json({error:'client requis'});
-      const q=encodeURIComponent(`name='${client.replace(/'/g,"\\'")}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
+      // Chercher les dossiers dont le nom contient le client (gère "Martin" -> "Martin-Paris")
+      const q=encodeURIComponent(`name contains '${client.replace(/'/g,"\\'")}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
       const fr=await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)`,{headers:{Authorization:'Bearer '+token}});
       const fj=await fr.json();
       let files=[];
-      for(const folder of (fj.files||[])){
-        const lq=encodeURIComponent(`'${folder.id}' in parents and trashed=false`);
+      // Pour chaque dossier client trouvé, lister récursivement (fichiers + contenu des sous-dossiers)
+      async function listRec(folderId,prefix){
+        const lq=encodeURIComponent(`'${folderId}' in parents and trashed=false`);
         const lr=await fetch(`https://www.googleapis.com/drive/v3/files?q=${lq}&fields=files(id,name,webViewLink,mimeType,createdTime)&orderBy=createdTime desc`,{headers:{Authorization:'Bearer '+token}});
-        const lj=await lr.json();if(lj.files)files=files.concat(lj.files);
+        const lj=await lr.json();
+        for(const f of (lj.files||[])){
+          if(f.mimeType==='application/vnd.google-apps.folder'){
+            await listRec(f.id,(prefix?prefix+' / ':'')+f.name);
+          }else{
+            files.push({id:f.id,name:(prefix?prefix+' / ':'')+f.name,webViewLink:f.webViewLink,mimeType:f.mimeType,createdTime:f.createdTime});
+          }
+        }
+      }
+      for(const folder of (fj.files||[])){
+        await listRec(folder.id,'');
       }
       return res.status(200).json({files});
     }
