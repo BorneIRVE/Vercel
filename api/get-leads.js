@@ -45,10 +45,11 @@ module.exports = async function handler(req, res) {
     }
   }
 
-  // POST — Mettre à jour un lead
+  // POST — Créer ou mettre à jour un lead
   if (req.method === 'POST') {
     try {
-      const { id, statut, notes, histo_action } = req.body;
+      const body = req.body || {};
+      const { id, statut, histo_action, _create } = body;
 
       const r = await fetch(`${KV_URL}/get/crm_leads`, {
         headers: { Authorization: `Bearer ${KV_TOKEN}` },
@@ -61,14 +62,34 @@ module.exports = async function handler(req, res) {
         if (!Array.isArray(leads)) leads = [];
       }
 
+      // Création d'un nouveau lead (ex: sous-traitance saisie manuellement)
+      if (_create) {
+        const newLead = Object.assign({}, body);
+        delete newLead._create;
+        if (!newLead.id) newLead.id = Date.now();
+        if (!newLead.date) newLead.date = new Date().toLocaleDateString('fr-FR');
+        newLead.histo = [{ date: new Date().toLocaleDateString('fr-FR'), action: histo_action || 'Créé manuellement' }];
+        delete newLead.histo_action;
+        leads.push(newLead);
+        await fetch(`${KV_URL}/set/crm_leads`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${KV_TOKEN}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify(leads),
+        });
+        return res.status(200).json({ success: true, id: newLead.id });
+      }
+
       const lead = leads.find(l => l.id === id);
       if (!lead) return res.status(404).json({ error: 'Lead introuvable' });
 
       if (statut === '__delete__') {
         leads = leads.filter(l => l.id !== id);
       } else {
-        if (statut !== undefined) lead.statut = statut;
-        if (notes  !== undefined) lead.notes  = notes;
+        // Mettre à jour tous les champs fournis (sauf id et histo_action)
+        Object.keys(body).forEach(function(k){
+          if (k === 'id' || k === 'histo_action') return;
+          lead[k] = body[k];
+        });
         if (histo_action) {
           lead.histo = lead.histo || [];
           lead.histo.push({ date: new Date().toLocaleDateString('fr-FR'), action: histo_action });
