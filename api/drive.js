@@ -75,82 +75,77 @@ module.exports = async function handler(req,res){
 
     // === MOVE (POST) : déplace le dossier client vers un autre statut ===
     if(action==='move'){
-      const {client,annee,mois,nouveauStatut}=req.body;
+      const {client,annee,mois,nouveauStatut,typeDossier}=req.body;
       if(!client||!nouveauStatut)return res.status(400).json({error:'client et nouveauStatut requis'});
+      const typeD=typeDossier||'Chantiers directs';
+      // Structure: Année / Mois / Statut / Type / Client
       const fAnnee=await findFolder(token,String(annee),ROOT);
       if(!fAnnee)return res.status(200).json({success:true,moved:false,reason:'année introuvable'});
-      const sr=await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(`'${fAnnee}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`)}&fields=files(id,name)`,{headers:{Authorization:'Bearer '+token}});
+      const fMois=await findFolder(token,String(mois),fAnnee);
+      if(!fMois)return res.status(200).json({success:true,moved:false,reason:'mois introuvable'});
+      // Chercher le dossier client dans tous les statuts de ce mois
+      const sr=await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(`'${fMois}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`)}&fields=files(id,name)`,{headers:{Authorization:'Bearer '+token}});
       const sj=await sr.json();
       let fClient=null,statutTrouve=null;
       for(const st of (sj.files||[])){
-        const fM=await findFolder(token,mois,st.id);
-        if(fM){const fc=await findFolder(token,String(client),fM);if(fc){fClient=fc;statutTrouve=st.name;break;}}
+        const fType=await findFolder(token,typeD,st.id);
+        if(fType){const fc=await findFolder(token,String(client),fType);if(fc){fClient=fc;statutTrouve=st.name;break;}}
       }
       if(!fClient)return res.status(200).json({success:true,moved:false,reason:'dossier client introuvable'});
       if(statutTrouve===nouveauStatut)return res.status(200).json({success:true,moved:false,reason:'déjà dans le bon statut'});
-      const fNewStatut=await findOrCreateFolder(token,nouveauStatut,fAnnee);
-      const fNewMois=await findOrCreateFolder(token,mois,fNewStatut);
+      // Créer Mois/NouveauStatut/Type
+      const fNewStatut=await findOrCreateFolder(token,nouveauStatut,fMois);
+      const fNewType=await findOrCreateFolder(token,typeD,fNewStatut);
       const gr=await fetch(`https://www.googleapis.com/drive/v3/files/${fClient}?fields=parents`,{headers:{Authorization:'Bearer '+token}});
       const gj=await gr.json();
-      await fetch(`https://www.googleapis.com/drive/v3/files/${fClient}?addParents=${fNewMois}&removeParents=${(gj.parents||[]).join(',')}&fields=id,parents`,{method:'PATCH',headers:{Authorization:'Bearer '+token}});
+      await fetch(`https://www.googleapis.com/drive/v3/files/${fClient}?addParents=${fNewType}&removeParents=${(gj.parents||[]).join(',')}&fields=id,parents`,{method:'PATCH',headers:{Authorization:'Bearer '+token}});
       return res.status(200).json({success:true,moved:true});
     }
 
     // === UPLOAD (POST) : upload un fichier (réutilise/déplace le dossier client) ===
     if(action==='upload'||!action){
-      const {fileName,fileData,mimeType,annee,mois,client,fraisFonctionnement}=req.body;
+      const {fileName,fileData,mimeType,annee,mois,client,fraisFonctionnement,path}=req.body;
       if(!fileName||!fileData)return res.status(400).json({error:'Fichier manquant'});
+
+      // Helper upload dans un dossier donné
+      async function uploadInto(folderId){
+        const boundary='----irve'+Date.now();
+        const meta={name:fileName,parents:[folderId]};
+        const buffer=Buffer.from(fileData,'base64');
+        const pre=`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${boundary}\r\nContent-Type: ${mimeType||'application/octet-stream'}\r\n\r\n`;
+        const post=`\r\n--${boundary}--`;
+        const body=Buffer.concat([Buffer.from(pre,'utf8'),buffer,Buffer.from(post,'utf8')]);
+        const ur=await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':`multipart/related; boundary=${boundary}`},body});
+        const uj=await ur.json();
+        if(!uj.id)throw new Error('Upload échoué: '+JSON.stringify(uj));
+        await fetch(`https://www.googleapis.com/drive/v3/files/${uj.id}/permissions`,{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({role:'reader',type:'anyone'})});
+        return uj.webViewLink||`https://drive.google.com/file/d/${uj.id}/view`;
+      }
 
       // Cas frais de fonctionnement : Frais-Fonctionnement / Année / Mois (à la racine)
       if(fraisFonctionnement){
-        const fFrais=await findOrCreateFolder(token,'Frais-Fonctionnement',ROOT);
-        const fAnneeF=await findOrCreateFolder(token,String(annee),fFrais);
-        const fMoisF=await findOrCreateFolder(token,String(mois),fAnneeF);
-        const boundaryF='----irve'+Date.now();
-        const metaF={name:fileName,parents:[fMoisF]};
-        const bufferF=Buffer.from(fileData,'base64');
-        const preF=`--${boundaryF}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metaF)}\r\n--${boundaryF}\r\nContent-Type: ${mimeType||'application/octet-stream'}\r\n\r\n`;
-        const postF=`\r\n--${boundaryF}--`;
-        const bodyF=Buffer.concat([Buffer.from(preF,'utf8'),bufferF,Buffer.from(postF,'utf8')]);
-        const urF=await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':`multipart/related; boundary=${boundaryF}`},body:bodyF});
-        const ujF=await urF.json();
-        if(!ujF.id)throw new Error('Upload échoué: '+JSON.stringify(ujF));
-        await fetch(`https://www.googleapis.com/drive/v3/files/${ujF.id}/permissions`,{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({role:'reader',type:'anyone'})});
-        return res.status(200).json({success:true,link:ujF.webViewLink||`https://drive.google.com/file/d/${ujF.id}/view`,id:ujF.id});
+        let p=await findOrCreateFolder(token,'Frais-Fonctionnement',ROOT);
+        p=await findOrCreateFolder(token,String(annee),p);
+        p=await findOrCreateFolder(token,String(mois),p);
+        return res.status(200).json({success:true,link:await uploadInto(p)});
       }
 
+      // Nouveau mode : chemin explicite (tableau de dossiers à créer en cascade depuis la racine)
+      if(Array.isArray(path)&&path.length){
+        let p=ROOT;
+        for(const seg of path){ if(seg&&String(seg).trim()) p=await findOrCreateFolder(token,String(seg).trim(),p); }
+        return res.status(200).json({success:true,link:await uploadInto(p)});
+      }
+
+      // Ancien mode (compat) : annee / [statut/mois] / client
       const parts=String(mois).split('/').filter(s=>s&&s.trim());
       const statutCible=parts[0]||'Nouveau';
       const moisCible=parts[1]||parts[0]||'';
-      const fAnnee=await findOrCreateFolder(token,String(annee),ROOT);
-      // Chercher dossier client existant dans un autre statut ce mois
-      let fClient=null;
-      const sr=await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(`'${fAnnee}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`)}&fields=files(id,name)`,{headers:{Authorization:'Bearer '+token}});
-      const sj=await sr.json();
-      for(const st of (sj.files||[])){
-        const fM=await findFolder(token,moisCible,st.id);
-        if(fM){const fc=await findFolder(token,String(client),fM);if(fc){fClient=fc;break;}}
-      }
-      const fStatut=await findOrCreateFolder(token,statutCible,fAnnee);
-      const fMois=await findOrCreateFolder(token,moisCible,fStatut);
-      if(fClient){
-        const gr=await fetch(`https://www.googleapis.com/drive/v3/files/${fClient}?fields=parents`,{headers:{Authorization:'Bearer '+token}});
-        const gj=await gr.json();
-        if((gj.parents||[])[0]!==fMois)await fetch(`https://www.googleapis.com/drive/v3/files/${fClient}?addParents=${fMois}&removeParents=${(gj.parents||[]).join(',')}&fields=id`,{method:'PATCH',headers:{Authorization:'Bearer '+token}});
-      }else{
-        fClient=await findOrCreateFolder(token,String(client),fMois);
-      }
-      const boundary='----irve'+Date.now();
-      const meta={name:fileName,parents:[fClient]};
-      const buffer=Buffer.from(fileData,'base64');
-      const pre=`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${boundary}\r\nContent-Type: ${mimeType||'application/octet-stream'}\r\n\r\n`;
-      const post=`\r\n--${boundary}--`;
-      const body=Buffer.concat([Buffer.from(pre,'utf8'),buffer,Buffer.from(post,'utf8')]);
-      const ur=await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':`multipart/related; boundary=${boundary}`},body});
-      const uj=await ur.json();
-      if(!uj.id)throw new Error('Upload échoué: '+JSON.stringify(uj));
-      await fetch(`https://www.googleapis.com/drive/v3/files/${uj.id}/permissions`,{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({role:'reader',type:'anyone'})});
-      return res.status(200).json({success:true,link:uj.webViewLink||`https://drive.google.com/file/d/${uj.id}/view`,id:uj.id});
+      let p=await findOrCreateFolder(token,String(annee),ROOT);
+      p=await findOrCreateFolder(token,statutCible,p);
+      p=await findOrCreateFolder(token,moisCible,p);
+      p=await findOrCreateFolder(token,String(client),p);
+      return res.status(200).json({success:true,link:await uploadInto(p)});
     }
 
     return res.status(400).json({error:'Action inconnue: '+action});
