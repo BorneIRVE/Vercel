@@ -56,6 +56,24 @@ module.exports = async function handler(req,res){
   try{
     const token=await getAccessToken();
 
+    // === FOLDERLINK (GET) : lien partageable du dossier année (ou année/mois) ===
+    if(action==='folderlink'){
+      res.setHeader('Cache-Control','no-store');
+      const annee=(req.query.annee||'').trim();
+      const mois=(req.query.mois||'').trim();
+      if(!annee)return res.status(400).json({error:'annee requise'});
+      let folder=await findFolder(token,annee,ROOT);
+      if(!folder)return res.status(200).json({link:null,reason:'dossier année introuvable'});
+      if(mois){
+        const fm=await findFolder(token,mois,folder);
+        if(!fm)return res.status(200).json({link:null,reason:'dossier mois introuvable'});
+        folder=fm;
+      }
+      // Rendre le dossier accessible par lien
+      try{await fetch(`https://www.googleapis.com/drive/v3/files/${folder}/permissions`,{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({role:'reader',type:'anyone'})});}catch(e){}
+      return res.status(200).json({link:'https://drive.google.com/drive/folders/'+folder});
+    }
+
     // === LIST (GET) : liste les fichiers d'un client ===
     if(action==='list'){
       res.setHeader('Cache-Control','no-store');
